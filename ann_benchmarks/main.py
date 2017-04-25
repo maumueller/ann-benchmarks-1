@@ -10,13 +10,14 @@ import shutil
 import importlib
 import traceback
 
+from ann_benchmarks.results import get_results, store_results
 from ann_benchmarks.datasets import get_dataset, split_dataset, get_query_cache_path
 from ann_benchmarks.distance import metrics as pd
 from ann_benchmarks.constants import INDEX_DIR
 from ann_benchmarks.algorithms.bruteforce import BruteForceBLAS
 from ann_benchmarks.algorithms.definitions import get_algorithms, get_definitions
 
-def run_algo(X_train, queries, library, algo, distance, results_fn,
+def run_algo(count, X_train, queries, library, algo, distance, result_pipe,
         run_count=3, force_single=False):
     try:
         prepared_queries = False
@@ -37,18 +38,20 @@ def run_algo(X_train, queries, library, algo, distance, results_fn,
             def single_query(t):
                 v, _, _ = t
                 if prepared_queries:
-                    algo.prepare_query(v, 10)
+                    algo.prepare_query(v, count)
                     start = time.time()
                     algo.run_prepared_query()
                     total = (time.time() - start)
                     candidates = algo.get_prepared_query_results()
                 else:
                     start = time.time()
-                    candidates = algo.query(v, 10)
+                    candidates = algo.query(v, count)
                     total = (time.time() - start)
                 candidates = map(
                     lambda idx: (int(idx), float(pd[distance]['distance'](v, X_train[idx]))),
                     list(candidates))
+                if len(candidates) > count:
+                    print "(warning: algorithm %s returned %d results, but count is only %d)" % (algo.name, len(candidates), count)
                 return (total, candidates)
             if algo.use_threads() and not force_single:
                 pool = multiprocessing.pool.ThreadPool()
@@ -62,7 +65,7 @@ def run_algo(X_train, queries, library, algo, distance, results_fn,
             avg_candidates = total_candidates / len(queries)
             best_search_time = min(best_search_time, search_time)
 
-        output = {
+        result_pipe.send({
             "library": library,
             "name": algo.name,
             "build_time": build_time,
@@ -72,15 +75,11 @@ def run_algo(X_train, queries, library, algo, distance, results_fn,
             "candidates": avg_candidates,
             "run_count": run_count,
             "run_alone": force_single
-        }
-
-        f = open(results_fn, 'a')
-        f.write(json.dumps(output) + "\n")
-        f.close()
+        })
     finally:
         algo.done()
 
-def compute_distances(distance, X_train, X_test):
+def compute_distances(distance, count, X_train, X_test):
     print('computing max distances for queries...')
 
     bf = BruteForceBLAS(distance, precision=X_train.dtype)
@@ -88,8 +87,8 @@ def compute_distances(distance, X_train, X_test):
     bf.fit(X_train)
     queries = []
     for x in X_test:
-        correct = bf.query_with_distances(x, 10)
-	# disregard queries that don't have near neighbors.
+        correct = bf.query_with_distances(x, count)
+        # disregard queries that don't have near neighbors.
         if len(correct) > 0:
             max_distance = max(correct, key=lambda (_, distance): distance)[1]
             queries.append((x, max_distance, correct))
@@ -137,6 +136,11 @@ def main():
             metavar='NAME',
             help='load query points from another dataset instead of choosing them randomly from the training dataset',
             default=None)
+    parser.add_argument(
+            "-k", "--count",
+            default=10,
+            type=positive_int,
+            help="the number of near neighbours to search for")
     parser.add_argument(
             '--distance',
             help='the metric used to calculate the distance between points',
@@ -193,6 +197,8 @@ will produce results files with duplicate entries)''',
             action='store_true')
 
     args = parser.parse_args()
+    if args.timeout == -1:
+        args.timeout = None
 
     definitions = get_definitions(args.definitions)
     if hasattr(args, "list_algorithms"):
@@ -284,14 +290,12 @@ be available""" % name
         assert manifest == query_manifest, """\
 error: the training dataset and query dataset have incompatible manifests"""
 
-    results_fn = get_fn('results', args.dataset, args.limit)
     queries_fn = get_query_cache_path(
-        args.dataset, args.limit, args.distance, args.query_dataset)
-
-    print('storing queries in', queries_fn, 'and results in', results_fn)
+        args.dataset, args.count, args.limit, args.distance, args.query_dataset)
+    print('storing queries in', queries_fn)
 
     if not os.path.exists(queries_fn):
-        queries = compute_distances(args.distance, X_train, X_test)
+        queries = compute_distances(args.distance, args.count, X_train, X_test)
         with open(queries_fn, 'w') as f:
             pickle.dump(queries, f)
     else:
@@ -300,15 +304,15 @@ error: the training dataset and query dataset have incompatible manifests"""
 
     print('got', len(queries), 'queries')
 
-    algos_already_ran = set()
-    if os.path.exists(results_fn) and not args.force:
-        for line in open(results_fn):
-            run = json.loads(line)
-            algos_already_ran.add((run["library"], run["name"]))
+    algos_already_run = set()
+    if not args.force:
+        for run in get_results(args.dataset, args.limit, args.count,
+                args.distance, args.query_dataset):
+            algos_already_run.add((run["library"], run["name"]))
 
     point_type = manifest['point_type']
-    algos = get_algorithms(
-        definitions, constructors, len(X_train[0]), point_type, args.distance)
+    algos = get_algorithms(definitions, constructors,
+        len(X_train[0]), point_type, args.distance)
 
     if args.algorithm:
         print('running only', args.algorithm)
@@ -321,7 +325,7 @@ error: the training dataset and query dataset have incompatible manifests"""
 
     for library in algos.keys():
         for algo in algos[library]:
-            if (library, algo.name) not in algos_already_ran:
+            if (library, algo.name) not in algos_already_run:
                 algos_flat.append((library, algo))
 
     random.shuffle(algos_flat)
@@ -329,20 +333,45 @@ error: the training dataset and query dataset have incompatible manifests"""
     print('order:', [a.name for l, a in algos_flat])
 
     for library, algo in algos_flat:
+        recv_pipe, send_pipe = multiprocessing.Pipe(duplex=False)
         print(algo.name, '...')
         # Spawn a subprocess to force the memory to be reclaimed at the end
         p = multiprocessing.Process(
             target=run_algo,
-            args=(X_train, queries, library, algo, args.distance, results_fn, args.runs, args.single))
+            args=(args.count, X_train, queries, library, algo,
+                  args.distance, send_pipe, args.runs, args.single))
+
         p.start()
-        if args.timeout >= 0:
-            p.join(args.timeout)
-            if p.is_alive():
-                print(algo.name, " has timed out after %d seconds " % (args.timeout))
+        send_pipe.close()
+
+        timed_out = False
+        try:
+            results = recv_pipe.poll(args.timeout)
+            if results:
+                # If there's something waiting in the pipe at this point, then
+                # the worker has begun sending us results and we should receive
+                # them
+                results = recv_pipe.recv()
+            else:
+                # If we've exceeded the timeout and there are no results, then
+                # terminate the worker process (XXX: what should we do about
+                # algo.done() here?)
                 p.terminate()
-                p.join()
+                timed_out = True
+                results = None
+        except EOFError:
+            # The worker has crashed or otherwise failed to send us results
+            results = None
+        p.join()
+        recv_pipe.close()
+
+        if results:
+            store_results(results, args.dataset, args.limit,
+                    args.count, args.distance, args.query_dataset)
+        elif timed_out:
+            print "(algorithm worker process took too long)"
         else:
-            p.join()
+            print "(algorithm worker process stopped unexpectedly)"
 
 if __name__ == '__main__':
     main()

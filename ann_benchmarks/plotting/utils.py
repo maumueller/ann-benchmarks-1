@@ -1,47 +1,47 @@
+from __future__ import absolute_import
+
 import os, json, pickle
 from ann_benchmarks.main import get_fn
+from ann_benchmarks.results import get_results
 from ann_benchmarks.plotting.metrics import all_metrics as metrics
 import matplotlib.pyplot as plt
 import numpy
 
-results_cache = {}
-results_call_set = {}
-
-def create_pointset(algo, all_data, xm, ym):
+def create_pointset(algo, all_data, xn, yn):
+    xm, ym = (metrics[xn], metrics[yn])
     data = all_data[algo]
     rev = ym["worst"] < 0
-    data.sort(key=lambda (a, n, xv, yv): yv, reverse=rev) # sort by y coordinate
-    ls = [t[1] for t in data]
+    data.sort(key=lambda (a, n, rs): rs[yn], reverse=rev) # sort by y coordinate
 
-    axs, ays = [], []
+    axs, ays, als = [], [], []
     # Generate Pareto frontier
-    xs, ys = [], []
+    xs, ys, ls = [], [], []
     last_x = xm["worst"]
     comparator = \
       (lambda xv, lx: xv > lx) if last_x < 0 else (lambda xv, lx: xv < lx)
-    for algo, algo_name, xv, yv in data:
+    for algo, algo_name, results in data:
+        xv, yv = (results[xn], results[yn])
+        if not xv or not yv:
+            continue
         axs.append(xv)
         ays.append(yv)
+        als.append(algo_name)
         if comparator(xv, last_x):
             last_x = xv
             xs.append(xv)
             ys.append(yv)
-    return xs, ys, axs, ays, ls
+            ls.append(algo_name)
+    return xs, ys, ls, axs, ays, als
 
 def enumerate_query_caches(ds):
     for f in os.listdir("queries/"):
         if f.startswith(ds + "_") and f.endswith(".p"):
             yield "queries/" + f
 
-def load_results(datasets, xm, ym, limit = -1):
-    ds_id = "".join(datasets) + xm["description"] + ym["description"] + str(limit)
-    if ds_id in results_call_set:
-        return results_call_set[ds_id]
-
+def load_results(datasets, limit = -1):
     runs = {}
     all_algos = set()
     for ds in datasets:
-        results_fn = get_fn("results", ds)
         queries_fn = list(enumerate_query_caches(ds))
         assert len(queries_fn) > 0, '''\
 no query cache files exist for dataset "%s"''' % ds
@@ -53,17 +53,8 @@ first (%s)""" % (ds, queries_fn[0])
 
         queries = pickle.load(open(queries_fn))
         runs[ds] = {}
-        if not ds in results_cache:
-            with open(get_fn("results", ds, limit)) as f:
-                results_cache[ds] = []
-                for line in f:
-                    try:
-                        l = json.loads(line)
-                    except:
-                        print "Skipping line"
-                    results_cache[ds].append(l)
-
-        for run in results_cache[ds]:
+        # XXX: these parameters won't be allowed to be None for long
+        for run in get_results(ds, limit, None, None):
             algo = run["library"]
             algo_name = run["name"]
             build_time = run["build_time"]
@@ -71,17 +62,17 @@ first (%s)""" % (ds, queries_fn[0])
 
             print "--"
             print algo_name
-            xv = xm["function"](queries, run)
-            yv = ym["function"](queries, run)
-            print xv, yv
-            if not xv or not yv:
-                continue
+            results = {}
+            for name, metric in metrics.items():
+                v = metric["function"](queries, run)
+                results[name] = v
+                if v:
+                    print "%s: %g" % (name, v)
 
             all_algos.add(algo)
             if not algo in runs[ds]:
                 runs[ds][algo] = []
-            runs[ds][algo].append((algo, algo_name, xv, yv))
-    results_call_set[ds_id] = (runs, all_algos)
+            runs[ds][algo].append((algo, algo_name, results))
     return (runs, all_algos)
 
 def create_linestyles(algos):
