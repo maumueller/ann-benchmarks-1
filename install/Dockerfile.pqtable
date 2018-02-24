@@ -1,0 +1,47 @@
+FROM ann-benchmarks
+
+#TODO Building OpenCV from scratch is very time-consuming, move this to another image? 
+
+RUN apt-get update -y && apt-get upgrade -y
+RUN apt-get install -y cmake libgoogle-perftools-dev 
+RUN apt-get remove x264 libx264-dev
+
+RUN  apt-get install -y build-essential checkinstall cmake pkg-config yasm
+RUN  apt-get install -y git gfortran
+RUN  apt-get install -y libjpeg8-dev libjasper-dev libpng12-dev
+
+RUN  apt-get install -y libtiff5-dev
+
+RUN  apt-get install -y libavcodec-dev libavformat-dev libswscale-dev libdc1394-22-dev
+RUN  apt-get install -y libxine2-dev libv4l-dev
+RUN  apt-get install -y libgstreamer0.10-dev libgstreamer-plugins-base0.10-dev
+RUN  apt-get install -y qt5-default libgtk2.0-dev libtbb-dev
+RUN  apt-get install -y libatlas-base-dev
+RUN  apt-get install -y libfaac-dev libmp3lame-dev libtheora-dev
+RUN  apt-get install -y libvorbis-dev libxvidcore-dev
+RUN  apt-get install -y libopencore-amrnb-dev libopencore-amrwb-dev
+RUN  apt-get install -y x264 v4l-utils
+
+# Optional dependencies
+RUN  apt-get install -y libprotobuf-dev protobuf-compiler
+RUN  apt-get install -y libgoogle-glog-dev libgflags-dev
+RUN  apt-get install -y libgphoto2-dev libeigen3-dev libhdf5-dev doxygen
+RUN git clone https://github.com/opencv/opencv.git
+RUN cd opencv && git checkout 3.3.1
+
+RUN git clone https://github.com/opencv/opencv_contrib.git
+RUN cd opencv_contrib && git checkout 3.3.1
+
+RUN cd opencv && mkdir build && cd build && cmake -D CMAKE_BUILD_TYPE=RELEASE \
+      -D CMAKE_INSTALL_PREFIX=/usr/local \
+      -D INSTALL_C_EXAMPLES=ON \
+      -D INSTALL_PYTHON_EXAMPLES=ON \
+      -D WITH_TBB=ON \
+      -D WITH_V4L=ON \
+      -D WITH_QT=ON \
+      -D WITH_OPENGL=ON \
+      -D OPENCV_EXTRA_MODULES_PATH=../../opencv_contrib/modules \
+      -D BUILD_EXAMPLES=ON .. && make && make install && sh -c 'echo "/usr/local/lib" >> /etc/ld.so.conf.d/opencv.conf' && ldconfig
+
+RUN git clone https://github.com/maumueller/pqtable.git 
+RUN cd pqtable && mkdir build && cd build && cmake .. && make

@@ -1,5 +1,13 @@
 float:
   any:
+    pqtable:
+      docker-tag: ann-benchmarks-pqtable
+      module: ann_benchmarks.algorithms.subprocess
+      base-args: [["pqtable/build/bin/pqtablewrapper"]]
+      constructor: FloatSubprocessPrepared 
+      run-groups:
+        base:
+            args: {"M" : [4, 8]} 
     DolphinnPy:
       docker-tag: ann-benchmarks-dolphinn # Docker tag
       module: ann_benchmarks.algorithms.dolphinnpy # Python class
