@@ -3,6 +3,7 @@ import numpy
 import os
 import random
 import sys
+from math import sqrt, ceil
 try:
     from urllib import urlretrieve
 except ImportError:
@@ -206,6 +207,30 @@ def random(out_fn, n_dims, n_samples, centers, distance):
     X_train, X_test = sklearn.model_selection.train_test_split(X, test_size=0.1, random_state=1)
     write_output(X_train, X_test, out_fn, distance)
 
+def random_clusters(out_fn, n_dims, n_data, n_clusters):
+    def normalize(v):
+        return v / numpy.linalg.norm(v)
+
+    def get_random_vec():
+        return normalize(numpy.random.normal(0, 1, n_dims) / sqrt(n_dims))
+
+    def distort_vec(vec, target_distance):
+        distortion = numpy.random.normal(0, 1, n_dims) * target_distance / sqrt(n_dims)
+        return normalize(vec + distortion)
+
+    points_per_cluster = n_data / n_clusters
+    X_train, X_test = [], []
+    target_distances = [0.05, 0.2, 0.8, sqrt(2) / 1.05] * (ceil(n_clusters / 4))
+    target_distances = target_distances[:n_clusters]
+    points_per_cluster = ceil(n_data / n_clusters)
+    # use three different types of clusters
+    for dist in target_distances:
+        v = get_random_vec()
+        X_test.append(v)
+        for _ in range(points_per_cluster):
+            X_train.append(distort_vec(v, dist))
+    write_output(numpy.array(X_train[:n_data]), numpy.array(X_test), out_fn, 'angular')
+
 DATASETS = {
     'fashion-mnist-784-euclidean': fashion_mnist,
     'gist-960-euclidean': gist,
@@ -221,4 +246,5 @@ DATASETS = {
     'sift-128-euclidean': sift,
     'nytimes-256-angular': lambda out_fn: nytimes(out_fn, 256),
     'nytimes-16-angular': lambda out_fn: nytimes(out_fn, 16),
+    'random-angular': lambda out_fn: random_clusters(out_fn, 100, 100000, 1000),
 }
