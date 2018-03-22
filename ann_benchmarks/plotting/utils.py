@@ -1,17 +1,13 @@
 from __future__ import absolute_import
 
-import os, json, pickle
-from ann_benchmarks.main import get_fn
-from ann_benchmarks.results import get_results
+import os, itertools, json, numpy, pickle
 from ann_benchmarks.plotting.metrics import all_metrics as metrics
 import matplotlib.pyplot as plt
-import numpy
 
-def create_pointset(algo, all_data, xn, yn):
+def create_pointset(data, xn, yn):
     xm, ym = (metrics[xn], metrics[yn])
-    data = all_data[algo]
     rev = ym["worst"] < 0
-    data.sort(key=lambda (a, n, rs): rs[yn], reverse=rev) # sort by y coordinate
+    data.sort(key=lambda t: t[-1], reverse=rev) # sort by y coordinate
 
     axs, ays, als = [], [], []
     # Generate Pareto frontier
@@ -19,8 +15,7 @@ def create_pointset(algo, all_data, xn, yn):
     last_x = xm["worst"]
     comparator = \
       (lambda xv, lx: xv > lx) if last_x < 0 else (lambda xv, lx: xv < lx)
-    for algo, algo_name, results in data:
-        xv, yv = (results[xn], results[yn])
+    for algo, algo_name, xv, yv in data:
         if not xv or not yv:
             continue
         axs.append(xv)
@@ -33,55 +28,54 @@ def create_pointset(algo, all_data, xn, yn):
             ls.append(algo_name)
     return xs, ys, ls, axs, ays, als
 
-def enumerate_query_caches(ds):
-    for f in os.listdir("queries/"):
-        if f.startswith(ds + "_") and f.endswith(".p"):
-            yield "queries/" + f
+def compute_metrics(true_nn_distances, res, metric_1, metric_2):
+    all_results = {}
+    for i, (definition, run) in enumerate(res):
+        algo = definition.algorithm
+        algo_name = run.attrs['name']
+        # cache distances to avoid access to hdf5 file
+        run_distances = list(run['distances'])
 
-def load_results(datasets, limit = -1):
-    runs = {}
-    all_algos = set()
-    for ds in datasets:
-        queries_fn = list(enumerate_query_caches(ds))
-        assert len(queries_fn) > 0, '''\
-no query cache files exist for dataset "%s"''' % ds
-        if len(queries_fn) > 1:
-            print """\
-warning: more than one query cache file exists for dataset "%s", using only the
-first (%s)""" % (ds, queries_fn[0])
-        queries_fn = queries_fn[0]
+        metric_1_value = metrics[metric_1]['function'](true_nn_distances, run_distances, run.attrs)
+        metric_2_value = metrics[metric_2]['function'](true_nn_distances, run_distances, run.attrs)
 
-        queries = pickle.load(open(queries_fn))
-        runs[ds] = {}
-        # XXX: these parameters won't be allowed to be None for long
-        for run in get_results(ds, limit, None, None):
-            algo = run["library"]
-            algo_name = run["name"]
-            build_time = run["build_time"]
-            search_time = run["best_search_time"]
+        print('%3d: %80s %12.3f %12.3f' % (i, algo_name, metric_1_value, metric_2_value))
 
-            print "--"
-            print algo_name
-            results = {}
-            for name, metric in metrics.items():
-                v = metric["function"](queries, run)
-                results[name] = v
-                if v:
-                    print "%s: %g" % (name, v)
+        all_results.setdefault(algo, []).append((algo, algo_name, metric_1_value, metric_2_value))
 
-            all_algos.add(algo)
-            if not algo in runs[ds]:
-                runs[ds][algo] = []
-            runs[ds][algo].append((algo, algo_name, results))
-    return (runs, all_algos)
+    return all_results
 
-def create_linestyles(algos):
-    colors = plt.cm.Set1(numpy.linspace(0, 1, len(algos)))
-    faded = [[r, g, b, 0.3] for [r, g, b, a] in colors]
-    linestyles = {}
-    for i, algo in enumerate(algos):
-        linestyles[algo] = (colors[i], faded[i], ['--', '-.', '-', ':'][i%4], ['+', '<', 'o', '*', 'x'][i%5])
-    return linestyles
+def compute_all_metrics(true_nn_distances, run, algo):
+    algo_name = run.attrs["name"]
+    print('--')
+    print(algo_name)
+    results = {}
+    # cache distances to avoid access to hdf5 file
+    run_distances = list(run["distances"])
+    run_attrs = dict(run.attrs)
+    for name, metric in metrics.items():
+        v = metric["function"](true_nn_distances, run_distances, run_attrs)
+        results[name] = v
+        if v:
+            print('%s: %g' % (name, v))
+    return (algo, algo_name, results)
+
+def generate_n_colors(n):
+    vs = numpy.linspace(0.4, 1.0, 7)
+    colors = [(.9, .4, .4, 1.)]
+    def euclidean(a, b):
+        return sum((x-y)**2 for x, y in zip(a, b))
+    while len(colors) < n:
+        new_color = max(itertools.product(vs, vs, vs), key=lambda a: min(euclidean(a, b) for b in colors))
+        colors.append(new_color + (1.,))
+    return colors
+
+def create_linestyles(unique_algorithms):
+    colors = dict(zip(unique_algorithms, generate_n_colors(len(unique_algorithms))))
+    linestyles = dict((algo, ['--', '-.', '-', ':'][i%4]) for i, algo in enumerate(unique_algorithms))
+    markerstyles = dict((algo, ['+', '<', 'o', '*', 'x'][i%5]) for i, algo in enumerate(unique_algorithms))
+    faded = dict((algo, (r, g, b, 0.3)) for algo, (r, g, b, a) in colors.items())
+    return dict((algo, (colors[algo], faded[algo], linestyles[algo], markerstyles[algo])) for algo in unique_algorithms)
 
 def get_up_down(metric):
     if metric["worst"] == float("inf"):

@@ -1,8 +1,9 @@
 *.pyc
 *.o
-protocol/fr-*
-protocol/*/
+protocol/c/fr-*
 
 install/*.txt
 install/*.yaml
 install/lib-*/
+
+*.class

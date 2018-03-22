@@ -1,111 +1,43 @@
 from __future__ import absolute_import
 
+import h5py
 import os
-import gzip
-import json
+from ann_benchmarks.algorithms.definitions import get_result_filename
 
-def store_results(results, dataset, limit, count, distance, query_dataset = None):
-    fragments = {
-        "ds": dataset,
-        "l": limit,
-        "k": count,
-        "dst": distance,
-        "qds": query_dataset,
-        "inst": results["name"],
-        "algo": results["library"]
-    }
-    fn = None
-    if query_dataset:
-        fn = "results/k=%(k)d/dataset=%(ds)s/limit=%(l)d/distance=%(dst)s/query_dataset=%(qds)s/algo=%(algo)s/%(inst)s.json.gz" % fragments
-    else:
-        fn = "results/k=%(k)d/dataset=%(ds)s/limit=%(l)d/distance=%(dst)s/algo=%(algo)s/%(inst)s.json.gz" % fragments
+
+def store_results(dataset, count, definition, attrs, results):
+    fn = get_result_filename(dataset, count, definition)
     head, tail = os.path.split(fn)
     if not os.path.isdir(head):
         os.makedirs(head)
-    with gzip.open(fn, "w") as fp:
-        fp.write(json.dumps(results) + "\n")
+    f = h5py.File(fn, 'w')
+    for k, v in attrs.items():
+        f.attrs[k] = v
+    times = f.create_dataset('times', (len(results),), 'f')
+    neighbors = f.create_dataset('neighbors', (len(results), count), 'i')
+    distances = f.create_dataset('distances', (len(results), count), 'f')
+    for i, (time, ds) in enumerate(results):
+        times[i] = time
+        neighbors[i] = [n for n, d in ds] + [-1] * (count - len(ds))
+        distances[i] = [d for n, d in ds] + [float('inf')] * (count - len(ds))
+    f.close()
 
-def _listdir_filter(path, prefix):
-    for f in os.listdir(path):
-        if f.startswith(prefix):
-            yield f[len(prefix):]
 
-def enumerate_result_files(dataset = None, limit = None, count = None,
-        distance = None, query_dataset = None, algo = None):
-    def _next_part(path, element, prefix, mapping = None):
-        if not os.path.isdir(path):
-            return None
-        elif not element:
-            return map(mapping, _listdir_filter(path, prefix))
-        elif not isinstance(element, list):
-            return [element]
-        else:
-            return element
+def load_results(dataset, count, definitions):
+    for definition in definitions:
+        fn = get_result_filename(dataset, count, definition)
+        if os.path.exists(fn):
+            f = h5py.File(fn)
+            yield definition, f
+            f.close()
 
-    rdir = "results/"
-    counts = _next_part(rdir, count, "k=", int)
-    if not counts:
-        raise StopIteration
+def load_all_results():
+    for root, _, files in os.walk("results/"):
+        for fn in files:
+            try:
+                f = h5py.File(os.path.join(root, fn))
+                yield f
+                f.close()
+            except:
+                pass
 
-    for c in counts:
-        cdir = os.path.join("results", "k=%d" % c)
-        datasets = _next_part(cdir, dataset, "dataset=")
-        if not datasets:
-            continue
-
-        for d in datasets:
-            ddir = os.path.join(cdir, "dataset=%s" % d)
-            limits = _next_part(ddir, limit, "limit=", int)
-            if not limits:
-                continue
-
-            for l in limits:
-                ldir = os.path.join(ddir, "limit=%d" % l)
-                distances = _next_part(ldir, distance, "distance=")
-                if not distances:
-                    continue
-
-                for dst in distances:
-                    dstdir = os.path.join(ldir, "distance=%s" % dst)
-                    query_datasets = _next_part(
-                            dstdir, query_dataset, "query_dataset=")
-                    if not query_dataset:
-                        query_datasets.insert(0, None)
-
-                    for q in query_datasets:
-                        if q != None:
-                            qdir = os.path.join(dstdir, "query_dataset=%s" % q)
-                        else:
-                            qdir = dstdir
-                        algos = _next_part(qdir, algo, "algo=")
-                        if not algos:
-                            continue
-
-                        for a in algos:
-                            adir = os.path.join(qdir, "algo=%s" % a)
-                            runs = _next_part(adir, None, "")
-
-                            if not runs:
-                                continue
-                            else:
-                                for r in runs:
-                                    rpath = os.path.join(adir, r)
-                                    if not (os.path.isfile(rpath) \
-                                            and rpath.endswith(".json.gz")):
-                                        continue
-                                    descriptor = {
-                                        "count": c,
-                                        "dataset": d,
-                                        "limit": l,
-                                        "distance": dst,
-                                        "query_dataset": q,
-                                        "algorithm": a
-                                    }
-                                    yield (descriptor, rpath)
-
-def get_results(dataset, limit, count, distance, query_dataset = None):
-    for m, fn in enumerate_result_files(dataset, limit, count, distance,
-            query_dataset):
-        if m["query_dataset"] == query_dataset:
-            with gzip.open(fn, "r") as fp:
-                yield json.load(fp)

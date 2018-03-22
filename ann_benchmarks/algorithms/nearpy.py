@@ -10,12 +10,12 @@ class NearPy(BaseANN):
         self._hash_counts = hash_counts
         self._metric = metric
         self._filter = NearestFilter(10)
-        self.name = 'NearPy(n_bits=%d, hash_counts=%d)' % (n_bits, hash_counts)
+        self.name = 'NearPy(n_bits=%d, hash_counts=%d)' % (self._n_bits, self._hash_counts)
 
     def fit(self, X):
         hashes = []
 
-        for k in xrange(self._hash_counts):
+        for k in range(self._hash_counts):
             nearpy_rbp = nearpy.hashes.RandomBinaryProjections('rbp_%d' % k, self._n_bits)
             hashes.append(nearpy_rbp)
 
