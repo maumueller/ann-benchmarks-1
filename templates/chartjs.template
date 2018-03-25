@@ -1,4 +1,6 @@
+        {% if show_label %}
             <h3>{{xlabel}}/{{ylabel}}</h3>
+        {% endif %}
             <div id="{{ xlabel }}{{ ylabel }}{{ label }}">
             <canvas id="chart{{ xlabel }}{{ ylabel }}{{ label }}" width="800" height="600"></canvas>
             <script>

@@ -13,38 +13,27 @@
             approximate recall, index size, and build time.</p>
             <h2 id ="datasets">Results by Dataset</h2>
             {% for distance_data in dataset_with_distances %}
-                <h3>Distance: {{ distance_data.name }} </h3>
+                <h2>Distance: {{ distance_data.name }} </h2>
                 {% for entry in distance_data.entries %}
                 <a href="./{{entry.name}}.html">
-                    <div class="row" id="{{entry.name}}">
-                        <div class = "col-md-4 bg-success">
-                            <h4>{{entry.desc}}</h4>
-                    </div>
-                    <div class = "col-md-8">
-                        <img class = "img-responsive" src="{{entry.name}}.png" />
-                    </div>
-                </div>
+                            <h2 class="entry">{{entry.desc}}</h2>
                 </a>
+                    {{entry.html}}
                 <hr />
                 {% endfor %}
             {% endfor %}
             <h2 id="algorithms">Results by Algorithm</h2>
             <ul class="list-inline"><b>Algorithms:</b>
                 {% for algo in algorithms %}
-                <li><a href="#{{algo}}">{{algo}}</a></li>
+                <li><a href="#{{algo["name"]}}">{{algo["name"]}}</a></li>
                 {% endfor %}
             </ul>
             {% for algo in algorithms%}
-            <a href="./{{algo}}.html">
-                <div class="row" id="{{algo}}">
-                    <div class = "col-md-4 bg-success">
-                        <h4>{{algo}}</h4>
-                </div>
-                <div class = "col-md-8">
-                    <img class = "img-responsive" src="{{algo}}.png" />
-                </div>
-            </div>
+            <a href="./{{algo["name"]}}.html">
+                        <h2 class="entry">{{algo["name"]}}</h2>
             </a>
+            {{ algo.html }}
             <hr />
             {% endfor %}
+            </div>
 {% endblock %}

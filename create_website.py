@@ -108,7 +108,7 @@ def get_lines(all_data, xn, yn, render_all_points):
                 "scatter" : render_all_points})
     return plot_data
 
-def create_plot(all_data, xn, yn, linestyle, j2_env, additional_label = "", plottype = "line"):
+def create_plot(all_data, xn, yn, linestyle, j2_env, additional_label = "", plottype = "line", show_label = True):
     xm, ym = (metrics[xn], metrics[yn])
     render_all_points = plottype == "bubble"
     plot_data = get_lines(all_data, xn, yn, render_all_points)
@@ -124,40 +124,35 @@ def create_plot(all_data, xn, yn, linestyle, j2_env, additional_label = "", plot
                     xlabel = xm["description"], ylabel = ym["description"],
                     plottype = plottype, plot_label = get_plot_label(xm, ym),
                     label = additional_label, linestyle = linestyle,
-                    render_all_points = render_all_points)
+                    render_all_points = render_all_points, show_label = show_label)
 
-def build_detail_site(data, label_func, j2_env):
+def build_detail_site(data, label_func, j2_env, ls):
     for (name, runs) in data.items():
         print("Building '%s'" % name)
         all_runs = runs.keys()
-        linestyles = convert_linestyle(create_linestyles(all_runs))
         label = label_func(name)
         data = {"normal" : [], "scatter" : []}
 
         for plottype in args.plottype:
             xn, yn = plot_variants[plottype]
-            data["normal"].append(create_plot(runs, xn, yn, linestyles, j2_env))
+            data["normal"].append(create_plot(runs, xn, yn, ls, j2_env))
             if args.scatter:
                 data["scatter"].append(create_plot(runs, xn, yn,
-                    linestyles, j2_env, "Scatterplot ", "bubble"))
+                    ls, j2_env, "Scatterplot ", "bubble"))
 
         # create png plot for summary page
         data_for_plot = {}
-        for k in runs.keys():
-            data_for_plot[k] = prepare_data(runs[k], 'k-nn', 'qps')
-        plot.create_plot(data_for_plot, False,
-                False, True, 'k-nn', 'qps',  args.outputdir + name + ".png",
-                create_linestyles(all_runs))
         with open(args.outputdir + name + ".html", "w") as text_file:
             text_file.write(j2_env.get_template("detail_page.html").
                 render(title = label, plot_data = data, args = args))
 
 
-def build_index_site(datasets, algorithms, j2_env, file_name):
+def build_index_site(datasets, algorithms, j2_env, file_name, ls):
     distance_measures = sorted(set([get_distance_from_desc(e) for e in datasets.keys()]))
     sorted_datasets = sorted(set([get_dataset_from_desc(e) for e in datasets.keys()]))
 
     dataset_data = []
+    algo_data = []
 
     for dm in distance_measures:
         d = {"name" : dm.capitalize(), "entries": []}
@@ -168,13 +163,25 @@ def build_index_site(datasets, algorithms, j2_env, file_name):
             sorted_matches = sorted(matching_datasets, \
                     key = lambda e: int(get_count_from_desc(e)))
             for idd in sorted_matches:
-                d["entries"].append({"name" : idd, "desc" : get_dataset_label(idd)})
+                d["entries"].append({
+                    "name" : idd,
+                    "desc" : get_dataset_label(idd),
+                    "html" : create_plot(datasets[idd], 'k-nn', 'qps',
+                        ls['algorithms'], j2_env, additional_label = idd, plottype = "line",
+                        show_label = False)
+                    })
         dataset_data.append(d)
+    for algo in algorithms:
+        algo_data.append({
+            "name" : algo,
+            "desc" : algo,
+            "html" : create_plot(algorithms[algo], 'k-nn', 'qps', ls['datasets'], j2_env, additional_label = algo, plottype = "line", show_label = False)
+            })
 
     with open(args.outputdir + "index.html", "w") as text_file:
         text_file.write(j2_env.get_template("summary.html").
                 render(title = "ANN-Benchmarks", dataset_with_distances = dataset_data,
-                    algorithms = algorithms.keys()))
+                    algorithms = algo_data))
 
 def load_all_results():
     """Read all result files and compute all metrics"""
@@ -198,7 +205,7 @@ def load_all_results():
             old_sdn = sdn
         algo = properties["algo"]
         ms = compute_all_metrics(cached_true_dist, f, properties["algo"])
-        algo_ds = get_dataset_label(sdn)
+        algo_ds = sdn
 
         all_runs_by_algorithm.setdefault(algo, {}).setdefault(algo_ds, []).append(ms)
         all_runs_by_dataset.setdefault(sdn, {}).setdefault(algo, []).append(ms)
@@ -207,6 +214,10 @@ def load_all_results():
 runs_by_ds, runs_by_algo = load_all_results()
 j2_env = Environment(loader=FileSystemLoader("./templates/"), trim_blocks = True)
 j2_env.globals.update(zip=zip)
-build_detail_site(runs_by_ds, lambda label: get_dataset_label(label), j2_env)
-build_detail_site(runs_by_algo, lambda x: x, j2_env)
-build_index_site(runs_by_ds, runs_by_algo, j2_env, "index.html")
+ls = {
+    'algorithms':  convert_linestyle(create_linestyles(runs_by_algo)),
+    'datasets': convert_linestyle(create_linestyles(runs_by_ds))
+}
+build_detail_site(runs_by_ds, lambda label: get_dataset_label(label), j2_env, ls['algorithms'])
+build_detail_site(runs_by_algo, lambda x: x, j2_env, ls['datasets'])
+build_index_site(runs_by_ds, runs_by_algo, j2_env, "index.html", ls)
