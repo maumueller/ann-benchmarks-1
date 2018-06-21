@@ -57,4 +57,6 @@ class NmslibReuseIndex(BaseANN):
         ids, distances = self._index.knnQuery(v, n)
         return ids
 
+    def batch_query(self, X, n):
+        return self._index.knnQueryBatches(X, n)
 

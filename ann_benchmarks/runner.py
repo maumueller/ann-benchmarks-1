@@ -45,8 +45,15 @@ def run_individual_query(algo, X_train, X_test, distance, count, run_count, use_
 
         def batch_query(X):
             start = time.time()
-            result = algo.batch_query(X, count)
+            D, L = algo.batch_query(X, count)
             total = (time.time() - start)
+            results = []
+            for i in range(len(X)):
+                r = []
+                for l, d in zip(L[i], D[i]):
+                    if l != -1:
+                        r.append(l)
+                results.append(r)
             candidates = [[(int(idx), float(metrics[distance]['distance'](v, X_train[idx])))
                            for idx in single_results]
                           for v, single_results in zip(X, results)]
@@ -84,6 +91,7 @@ def run(definition, dataset, count, run_count=3, use_batch_query=False):
 error: query argument groups have been specified for %s.%s(%s), but the \
 algorithm instantiated from it does not implement the set_query_arguments \
 function""" % (definition.module, definition.constructor, definition.arguments)
+    print(use_batch_query)
 
     D = get_dataset(dataset)
     X_train = numpy.array(D['train'])

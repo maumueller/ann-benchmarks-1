@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 import sys
-sys.path.append("install/lib-faiss")
+sys.path.append("faiss")
 import numpy
 import ctypes
 import faiss
@@ -18,10 +18,12 @@ class FaissGPU(BaseANN):
 
     def fit(self, X):
         X = X.astype(numpy.float32)
-        self._index = faiss.index_factory(len(X[0]), "IVF%d,PQ64" % self._n_bits)
-        co = faiss.GpuClonerOptions()
-        co.useFloat16 = True
-        self._index = faiss.index_cpu_to_gpu(self._res, 0, self._index, co)
+        self._index = faiss.GpuIndexIVFFlat(self._res, len(X[0]), self._n_bits,
+                                               faiss.METRIC_L2)
+#        self._index = faiss.index_factory(len(X[0]), "IVF%d,Flat" % self._n_bits)
+#        co = faiss.GpuClonerOptions()
+#        co.useFloat16 = True
+#        self._index = faiss.index_cpu_to_gpu(self._res, 0, self._index, co)
         self._index.train(X)
         self._index.add(X)
         self._index.setNumProbes(self._n_probes)
@@ -39,6 +41,7 @@ class FaissGPU(BaseANN):
         return r
 
     def batch_query(self, X, n):
+        return self._index.search(X.astype(numpy.float32),n)
         D, L = self._index.search(X, n)
         res = []
         for i in range(len(X)):
