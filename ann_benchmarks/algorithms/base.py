@@ -2,9 +2,6 @@ from __future__ import absolute_import
 import psutil
 
 class BaseANN(object):
-    def use_threads(self):
-        return True
-
     def done(self):
         pass
 
@@ -23,3 +20,6 @@ class BaseANN(object):
 
     def query(self, q, n):
         return [] # array of candidate indices
+
+    def __str__(self):
+        return self.name

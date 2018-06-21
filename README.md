@@ -16,12 +16,15 @@ Evaluated
 * [PANNS](https://github.com/ryanrhymes/panns)
 * [NearPy](http://nearpy.io)
 * [KGraph](https://github.com/aaalgo/kgraph)
-* [NMSLIB (Non-Metric Space Library)](https://github.com/searchivarius/nmslib): SWGraph, HNSW, BallTree, MPLSH
+* [NMSLIB (Non-Metric Space Library)](https://github.com/nmslib/nmslib): SWGraph, HNSW, BallTree, MPLSH
+* [hnswlib (a part of nmslib project)](https://github.com/nmslib/hnsw)
 * [RPForest](https://github.com/lyst/rpforest)
 * [FAISS](https://github.com/facebookresearch/faiss.git)
 * [DolphinnPy](https://github.com/ipsarros/DolphinnPy)
 * [Datasketch](https://github.com/ekzhu/datasketch)
 * [PyNNDescent](https://github.com/lmcinnes/pynndescent)
+* [MRPT](https://github.com/teemupitkanen/mrpt)
+* [NGT](https://github.com/yahoojapan/NGT): PANNG
 
 Data sets
 =========
@@ -43,32 +46,37 @@ We have a number of precomputed data sets for this. All data sets are pre-split 
 Results
 =======
 
+These are all as of 2018-06-10, running all benchmarks on a c5.4xlarge machine on AWS:
 
 glove-100-angular
+-----------------
 
 ![glove-100-angular](https://raw.github.com/erikbern/ann-benchmarks/master/results/glove-100-angular.png)
 
 sift-128-euclidean
+------------------
 
 ![glove-100-angular](https://raw.github.com/erikbern/ann-benchmarks/master/results/sift-128-euclidean.png)
 
 fashion-mnist-784-euclidean
+---------------------------
 
 ![fashion-mnist-784-euclidean](https://raw.github.com/erikbern/ann-benchmarks/master/results/fashion-mnist-784-euclidean.png)
 
 gist-960-euclidean
+------------------
 
 ![gist-960-euclidean](https://raw.github.com/erikbern/ann-benchmarks/master/results/gist-960-euclidean.png)
 
 nytimes-256-angular
+-------------------
 
 ![nytimes-256-angular](https://raw.github.com/erikbern/ann-benchmarks/master/results/nytimes-256-angular.png)
 
 glove-25-angular
+----------------
 
 ![glove-25-angular](https://raw.github.com/erikbern/ann-benchmarks/master/results/glove-25-angular.png)
-
-Results as of Feb 2018-02-05, running all benchmarks on a c5.4xlarge machine on AWS.
 
 Install
 =======
@@ -97,6 +105,7 @@ Including your algorithm
 1. Add your algorithm into `ann_benchmarks/algorithms` by providing a small Python wrapper.
 2. Add a Dockerfile in `install/` for it
 3. Add it to `algos.yaml`
+4. Add it to `.travis.yml`
 
 Principles
 ==========

@@ -55,8 +55,7 @@ def main():
     parser.add_argument(
         '--list-algorithms',
         help='print the names of all known algorithms and exit',
-        action='store_true',
-        default=argparse.SUPPRESS)
+        action='store_true')
     parser.add_argument(
         '--force',
         help='''re-run algorithms even if their results already exist''',
@@ -66,7 +65,7 @@ def main():
         metavar='COUNT',
         type=positive_int,
         help='run each algorithm instance %(metavar)s times and use only the best result',
-        default=3)
+        default=2)
     parser.add_argument(
         '--timeout',
         type=int,
@@ -81,12 +80,16 @@ def main():
         type=int,
         help='Max number of algorithms to run (just used for testing)',
         default=-1)
+    parser.add_argument(
+        '--run-disabled',
+        help='run algorithms that are disabled in algos.yml',
+        action='store_true')
 
     args = parser.parse_args()
     if args.timeout == -1:
         args.timeout = None
 
-    if hasattr(args, "list_algorithms"):
+    if args.list_algorithms:
         list_algorithms(args.definitions)
         sys.exit(0)
 
@@ -101,8 +104,27 @@ def main():
     distance = dataset.attrs['distance']
     definitions = get_definitions(args.definitions, dimension, point_type, distance, args.count)
 
-    # TODO(erikbern): should make this a helper function somewhere
-    definitions = [definition for definition in definitions if not os.path.exists(get_result_filename(args.dataset, args.count, definition))]
+    # Filter out, from the loaded definitions, all those query argument groups
+    # that correspond to experiments that have already been run. (This might
+    # mean removing a definition altogether, so we can't just use a list
+    # comprehension.)
+    filtered_definitions = []
+    for definition in definitions:
+        query_argument_groups = definition.query_argument_groups
+        if not query_argument_groups:
+            query_argument_groups = [[]]
+        not_yet_run = []
+        for query_arguments in query_argument_groups:
+            fn = get_result_filename(args.dataset,
+                    args.count, definition, query_arguments)
+            if not os.path.exists(fn):
+                not_yet_run.append(query_arguments)
+        if not_yet_run:
+            if definition.query_argument_groups:
+                definition = definition._replace(
+                        query_argument_groups = not_yet_run)
+            filtered_definitions.append(definition)
+    definitions = filtered_definitions
 
     random.shuffle(definitions)
     
@@ -145,10 +167,18 @@ def main():
                 return True
         definitions = [d for d in definitions if _test(d)]
 
+    if not args.run_disabled:
+        if len([d for d in definitions if d.disabled]):
+            print('Not running disabled algorithms:', [d for d in definitions if d.disabled])
+        definitions = [d for d in definitions if not d.disabled]
+
     if args.max_n_algorithms >= 0:
         definitions = definitions[:args.max_n_algorithms]
 
-    print('order:', definitions)
+    if len(definitions) == 0:
+        raise Exception('Nothing to run')
+    else:
+        print('Order:', definitions)
 
     for definition in definitions:
         print(definition, '...')
