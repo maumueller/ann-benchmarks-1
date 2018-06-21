@@ -77,6 +77,10 @@ def main():
         action='store_true',
         help='If set, then will run everything locally (inside the same process) rather than using Docker')
     parser.add_argument(
+        '--batch',
+        action='store_true',
+        help='If set, then will run everything locally (inside the same process) rather than using Docker')
+    parser.add_argument(
         '--max-n-algorithms',
         type=int,
         help='Max number of algorithms to run (just used for testing)',
@@ -186,7 +190,7 @@ def main():
 
         try:
             if args.local:
-                run(definition, args.dataset, args.count, args.runs)
+                run(definition, args.dataset, args.count, args.runs, use_batch_query = True)
             else:
                 run_docker(definition, args.dataset, args.count, args.runs)
         except KeyboardInterrupt:
