@@ -58,5 +58,8 @@ class NmslibReuseIndex(BaseANN):
         return ids
 
     def batch_query(self, X, n):
-        return self._index.knnQueryBatches(X, n)
+        self.res = self._index.knnQueryBatch(X, n)
+
+    def get_batch_results(self):
+        return [x for x, _ in self.res]
 
