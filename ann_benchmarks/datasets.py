@@ -222,9 +222,23 @@ def word2bits(out_fn, path, fn):
         for i in range(n_words):
             X[i] = numpy.array([float(z) > 0 for z in next(f).strip().split()[1:]], dtype=numpy.bool)
 
-        X_train, X_test = train_test_split(X, test_size=50)
+        X_train, X_test = train_test_split(X, test_size=1000)
         write_output(X_train, X_test, out_fn, 'hamming', 'bit')
 
+def sift_hamming(out_fn, fn):
+    import tarfile
+    local_fn = fn + '.tar.gz'
+    url = 'http://sss.projects.itu.dk/ann-benchmarks/datasets/%s.tar.gz' % fn
+    download(url, local_fn)
+    print('parsing vectors in %s...' % local_fn)
+    with tarfile.open(local_fn, 'r:gz') as t:
+        f = t.extractfile(fn)
+        lines = f.readlines()
+        X = numpy.zeros((len(lines), 256), dtype=numpy.bool)
+        for i, line in enumerate(lines):
+            X[i] = numpy.array([int(x) > 0 for x in line.strip()], dtype=numpy.bool)
+        X_train, X_test = train_test_split(X, test_size = 1000)
+        write_output(X_train, X_test, out_fn, 'hamming', 'bit')
 
 DATASETS = {
     'fashion-mnist-784-euclidean': fashion_mnist,
@@ -242,4 +256,5 @@ DATASETS = {
     'nytimes-256-angular': lambda out_fn: nytimes(out_fn, 256),
     'nytimes-16-angular': lambda out_fn: nytimes(out_fn, 16),
     'word2bits-800-hamming': lambda out_fn: word2bits(out_fn, '400K', 'w2b_bitlevel1_size800_vocab400K'),
+    'sift-256-hamming': lambda out_fn: sift_hamming(out_fn, 'sift.hamming.256'),
 }
