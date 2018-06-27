@@ -13,7 +13,7 @@ from ann_benchmarks.results import store_results, load_results
 
 def create_plot(all_data, raw, x_log, y_log, xn, yn, fn_out, linestyles):
     xm, ym = (metrics[xn], metrics[yn])
-# Now generate each plot
+    # Now generate each plot
     handles = []
     labels = []
     plt.figure(figsize=(12, 9))
@@ -43,6 +43,7 @@ def create_plot(all_data, raw, x_log, y_log, xn, yn, fn_out, linestyles):
         plt.ylim(ym['lim'])
     plt.savefig(fn_out, bbox_inches='tight')
     plt.close()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -95,11 +96,14 @@ if __name__ == "__main__":
     dimension = len(dataset['train'][0]) # TODO(erikbern): ugly
     point_type = 'float' # TODO(erikbern): should look at the type of X_train
     distance = dataset.attrs['distance']
-    definitions = get_definitions(args.definitions, dimension, point_type, distance, args.count)
+    count = int(args.count)
+    definitions = get_definitions(args.definitions, dimension, point_type, distance, count)
     unique_algorithms = get_unique_algorithms(args.definitions)
     linestyles = create_linestyles(unique_algorithms)
-    results = load_results(args.dataset, args.count, definitions)
-    runs = compute_metrics(dataset, results, args.x_axis, args.y_axis)
+    results = load_results(args.dataset, count, definitions)
+    runs = compute_metrics(list(dataset["distances"]), results, args.x_axis, args.y_axis)
+    if not runs:
+        raise Exception('Nothing to plot')
 
     create_plot(runs, args.raw, args.x_log,
             args.y_log, args.x_axis, args.y_axis, args.output, linestyles)
