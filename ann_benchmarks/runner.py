@@ -25,15 +25,26 @@ from ann_benchmarks.results import store_results
 
 
 def run_individual_query(algo, X_train, X_test, distance, count, run_count, use_batch_query):
+    prepared_queries = False
+    if hasattr(algo, "supports_prepared_queries"):
+        prepared_queries = algo.supports_prepared_queries()
+
     best_search_time = float('inf')
     for i in range(run_count):
         print('Run %d/%d...' % (i+1, run_count))
         n_items_processed = [0]  # a bit dumb but can't be a scalar since of Python's scoping rules
 
         def single_query(v):
-            start = time.time()
-            candidates = algo.query(v, count)
-            total = (time.time() - start)
+            if prepared_queries:
+                algo.prepare_query(v, count)
+                start = time.time()
+                algo.run_prepared_query()
+                total = (time.time() - start)
+                candidates = algo.get_prepared_query_results()
+            else:
+                start = time.time()
+                candidates = algo.query(v, count)
+                total = (time.time() - start)
             candidates = [(int(idx), float(metrics[distance]['distance'](v, X_train[idx])))
                           for idx in candidates]
             n_items_processed[0] += 1
@@ -93,11 +104,15 @@ function""" % (definition.module, definition.constructor, definition.arguments)
     print('got %d queries' % len(X_test))
 
     try:
+        prepared_queries = False
+        if hasattr(algo, "supports_prepared_queries"):
+            prepared_queries = algo.supports_prepared_queries()
+
         t0 = time.time()
-        index_size_before = algo.get_index_size("self")
+        memory_usage_before = algo.get_memory_usage()
         algo.fit(X_train)
         build_time = time.time() - t0
-        index_size = algo.get_index_size("self") - index_size_before
+        index_size = algo.get_memory_usage() - memory_usage_before
         print('Built index in', build_time)
         print('Index size: ', index_size)
 
