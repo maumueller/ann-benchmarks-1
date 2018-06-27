@@ -25,6 +25,10 @@ from ann_benchmarks.results import store_results
 
 
 def run_individual_query(algo, X_train, X_test, distance, count, run_count, use_batch_query):
+    prepared_queries = False
+    if hasattr(algo, "supports_prepared_queries"):
+        prepared_queries = algo.supports_prepared_queries()
+
     best_search_time = float('inf')
     for i in range(run_count):
         print('Run %d/%d...' % (i+1, run_count))
