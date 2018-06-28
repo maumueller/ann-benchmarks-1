@@ -224,6 +224,19 @@ def word2bits(out_fn, path, fn):
         X_train, X_test = train_test_split(X)
         write_output(X_train, X_test, out_fn, 'euclidean')  # TODO: use hamming
 
+def nus(out_fn):
+    import rarfile
+    url = 'http://dl.nextcenter.org/public/nuswide/NUS_WID_Low_Level_Features.rar'
+    local_fn = 'nus.rar'
+    download(url, local_fn)
+    print('parsing vectors in %s...' % local_fn)
+    with rarfile.RarFile(local_fn) as rf:
+        with rf.open('Low_Level_Features/BoW_int.dat') as f:
+            X = []
+            for i, l in enumerate(f):
+                X.append(numpy.array([float(x) for x in l.decode().strip().split(" ")]))
+            X_train, X_test = train_test_split(numpy.array(X))
+            write_output(X_train, X_test, out_fn, 'euclidean')
 
 DATASETS = {
     'fashion-mnist-784-euclidean': fashion_mnist,
@@ -241,4 +254,5 @@ DATASETS = {
     'nytimes-256-angular': lambda out_fn: nytimes(out_fn, 256),
     'nytimes-16-angular': lambda out_fn: nytimes(out_fn, 16),
     'word2bits-800-hamming': lambda out_fn: word2bits(out_fn, '400K', 'w2b_bitlevel1_size800_vocab400K'),
+    'nus-500-euclidean': nus,
 }
