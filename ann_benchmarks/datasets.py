@@ -1,4 +1,5 @@
 import h5py
+from math import sqrt
 import numpy
 import os
 import random
@@ -207,6 +208,44 @@ def random(out_fn, n_dims, n_samples, centers, distance):
     X_train, X_test = train_test_split(X, test_size=0.1)
     write_output(X_train, X_test, out_fn, distance)
 
+def random_clusters(out_fn, n_dims, n_data, n_queries, n_count=10):
+    def get_random_vec(d, length = 1):
+        """
+        Returns a random d-dimensional vector of a given expected length
+        """
+        return numpy.random.normal(0, 1, d) * length / sqrt(d)
+
+    def distort_vec(vec, target_distance):
+        """
+        Returns a random vector at an (expected) given distance to the given vector.
+        """
+        d = len(vec)
+        distortion = numpy.random.normal(0, 1, d) * target_distance / sqrt(d)
+        return vec + distortion
+
+    X_train, X_test = [], []
+    d = n_dims // 2
+    n_points = n_data - n_queries * n_count
+
+    for _ in range(n_points):
+        X_train.append(numpy.append(get_random_vec(d), [0.0] * d))
+
+    # pick n_queries indexes in the data set to generate queries from
+    generate_queries_from = numpy.random.choice(range(n_points), n_queries)
+
+    # place a random planted query, vary distance between 0.1 and 0.6
+    for i, idx in enumerate(generate_queries_from):
+        # copy first d coordinates, add some distortion
+        # note that with high probability v is closer to
+        # the X_train[idx] than all other points in X_train
+        v = numpy.append(X_train[idx][:d], get_random_vec(d, 1/sqrt(2)))
+        X_test.append(v)
+        # add points around v to the data set, those are the nearest neighbors
+        for _ in range(n_count):
+            X_train.append(distort_vec(v, 0.1 + 0.5 * i / n_queries))
+
+    write_output(numpy.array(X_train[:n_data]), numpy.array(X_test), out_fn, 'euclidean')
+
 
 def word2bits(out_fn, path, fn):
     import tarfile
@@ -281,4 +320,5 @@ DATASETS = {
     'nytimes-16-angular': lambda out_fn: nytimes(out_fn, 16),
     'word2bits-800-hamming': lambda out_fn: word2bits(out_fn, '400K', 'w2b_bitlevel1_size800_vocab400K'),
     'lastfm-64-dot': lambda out_fn: lastfm(out_fn, 64),
+    'random-10nn-euclidean': lambda out_fn: random_clusters(out_fn, 200, 1000000, 1000),
 }
