@@ -5,6 +5,7 @@ import os, json, pickle, yaml
 import numpy
 import hashlib
 from jinja2 import Environment, FileSystemLoader
+import pickle
 
 from ann_benchmarks import results
 from ann_benchmarks.datasets import get_dataset
@@ -67,9 +68,9 @@ def directory_path(s):
     return s + "/"
 
 def prepare_data(data, xn, yn):
-    """Change format from (algo, instance, dict) to (algo, instance, x, y)."""
+    """Change format from (algo, instance, dict, filename) to (algo, instance, x, y)."""
     res = []
-    for algo, algo_name, result in data:
+    for algo, algo_name, result, _ in data:
         res.append((algo, algo_name, result[xn], result[yn]))
     return res
 
@@ -94,6 +95,17 @@ parser.add_argument(
     '--scatter',
     help='create scatterplot for data',
     action = 'store_true')
+parser.add_argument(
+    '--cache',
+    default = 'website-cache.pickle',
+    help = 'file to store cache in',
+    action = 'store')
+parser.add_argument(
+        '--force',
+        help='overwrite existing files in cache',
+        nargs = '*',
+        default = [])
+
 args = parser.parse_args()
 
 def get_lines(all_data, xn, yn, render_all_points):
@@ -178,8 +190,16 @@ def build_index_site(datasets, algorithms, j2_env, file_name):
 
 def load_all_results():
     """Read all result files and compute all metrics"""
-    all_runs_by_dataset = {}
-    all_runs_by_algorithm = {}
+    def is_in_cache(cache, name):
+        return len([name for x in cache if x[-1] == name]) > 0
+
+    if os.path.isfile(args.cache):
+        with open(args.cache,  'rb') as f:
+            all_runs_by_dataset, all_runs_by_algorithm = pickle.load(f)
+    else:
+        all_runs_by_dataset = {}
+        all_runs_by_algorithm = {}
+
     cached_true_dist = []
     old_sdn = None
     for f in results.load_all_results():
@@ -197,14 +217,22 @@ def load_all_results():
             cached_true_dist = list(dataset["distances"])
             old_sdn = sdn
         algo = properties["algo"]
-        ms = compute_all_metrics(cached_true_dist, f, properties["algo"])
         algo_ds = get_dataset_label(sdn)
 
+        cache = all_runs_by_algorithm.get(algo, {}).get(algo_ds, [])
+        if is_in_cache(cache, f.filename) and algo not in args.force:
+            print("Cache already contains %s " % properties["name"])
+            continue
+
+        ms = compute_all_metrics(cached_true_dist, f, properties["algo"]) + (f.filename, )
         all_runs_by_algorithm.setdefault(algo, {}).setdefault(algo_ds, []).append(ms)
         all_runs_by_dataset.setdefault(sdn, {}).setdefault(algo, []).append(ms)
     return (all_runs_by_dataset, all_runs_by_algorithm)
 
 runs_by_ds, runs_by_algo = load_all_results()
+with open(args.cache, 'wb') as f:
+    pickle.dump((runs_by_ds, runs_by_algo), f, pickle.HIGHEST_PROTOCOL)
+
 j2_env = Environment(loader=FileSystemLoader("./templates/"), trim_blocks = True)
 j2_env.globals.update(zip=zip)
 build_detail_site(runs_by_ds, lambda label: get_dataset_label(label), j2_env)
