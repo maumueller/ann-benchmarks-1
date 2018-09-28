@@ -34,6 +34,8 @@ point_styles = {
         "+" : "rect",
         }
 
+cache_updates_per_save = 50
+
 def convert_color(color):
     r, g, b, a = color
     return "rgba(%(r)d, %(g)d, %(b)d, %(a)d)" % {
@@ -73,6 +75,16 @@ def prepare_data(data, xn, yn):
     for algo, algo_name, result, _ in data:
         res.append((algo, algo_name, result[xn], result[yn]))
     return res
+
+def load_from_cache(cachefile):
+    if os.path.isfile(cachefile):
+        with open(cachefile,  'rb') as f:
+            return pickle.load(f)
+    return ({}, {})
+
+def write_to_cache(ds, algo, cachefile):
+    with open(cachefile, 'wb') as f:
+        pickle.dump((ds, algo), f, pickle.HIGHEST_PROTOCOL)
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -193,15 +205,11 @@ def load_all_results():
     def is_in_cache(cache, name):
         return len([name for x in cache if x[-1] == name]) > 0
 
-    if os.path.isfile(args.cache):
-        with open(args.cache,  'rb') as f:
-            all_runs_by_dataset, all_runs_by_algorithm = pickle.load(f)
-    else:
-        all_runs_by_dataset = {}
-        all_runs_by_algorithm = {}
+    all_runs_by_dataset, all_runs_by_algorithm = load_from_cache(args.cache)
 
     cached_true_dist = []
     old_sdn = None
+    computed_metrics = 0
     for f in results.load_all_results():
         properties = dict(f.attrs)
         # TODO Fix this properly. Sometimes the hdf5 file returns bytes
@@ -227,11 +235,14 @@ def load_all_results():
         ms = compute_all_metrics(cached_true_dist, f, properties["algo"]) + (f.filename, )
         all_runs_by_algorithm.setdefault(algo, {}).setdefault(algo_ds, []).append(ms)
         all_runs_by_dataset.setdefault(sdn, {}).setdefault(algo, []).append(ms)
+        computed_metrics += 1
+        if computed_metrics % cache_updates_per_save == 0:
+            write_to_cache(all_runs_by_dataset, all_runs_by_algorithm, args.cache)
     return (all_runs_by_dataset, all_runs_by_algorithm)
 
+
 runs_by_ds, runs_by_algo = load_all_results()
-with open(args.cache, 'wb') as f:
-    pickle.dump((runs_by_ds, runs_by_algo), f, pickle.HIGHEST_PROTOCOL)
+write_to_cache(runs_by_ds, runs_by_algo, args.cache)
 
 j2_env = Environment(loader=FileSystemLoader("./templates/"), trim_blocks = True)
 j2_env.globals.update(zip=zip)
