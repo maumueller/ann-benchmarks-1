@@ -1,5 +1,7 @@
 FROM ann-benchmarks
 
 RUN git clone https://github.com/puffinn/puffinn
+RUN apt-get install -y pandoc
+RUN pip3 install pypandoc
 RUN cd puffinn && python3 setup.py install
 RUN python3 -c 'import puffinn'
